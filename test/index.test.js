@@ -1,46 +1,46 @@
-const nock = require('nock')
-// Requiring our app implementation
+const { Application } = require('probot')
 const myProbotApp = require('..')
-const { Probot } = require('probot')
-// Requiring our fixtures
-const payload = require('./fixtures/issues.opened')
-const issueCreatedBody = { body: 'Thanks for opening this issue!' }
 
-nock.disableNetConnect()
+const issueCommentCreatedPayload = require('./fixtures/issue-comment.created.json')
 
 describe('My Probot app', () => {
-  let probot
+  let app, github
 
   beforeEach(() => {
-    probot = new Probot({})
-    // Load our app into probot
-    const app = probot.load(myProbotApp)
+    const mockMath = Object.create(global.Math)
+    mockMath.random = jest.fn().mockReturnValue(0.5)
+    global.Math = mockMath
 
-    // just return a test token
-    app.app = () => 'test'
+    app = new Application()
+    app.load(myProbotApp)
+
+    github = {
+      repos: {
+        getContent: jest.fn().mockReturnValue(Promise.resolve({
+          data: {
+            content: Buffer.from(`maintainers:\n  - hogesuke1\n  - hogesuke2`).toString('base64')
+          }
+        }))
+      },
+      issues: {
+        addAssigneesToIssue: jest.fn().mockReturnValue(Promise.resolve({}))
+      }
+    }
+
+    app.auth = () => Promise.resolve(github)
   })
 
-  test('creates a comment when an issue is opened', async () => {
-    // Test that we correctly return a test token
-    nock('https://api.github.com')
-      .post('/app/installations/2/access_tokens')
-      .reply(200, { token: 'test' })
+  test('adds assignees to issue when a comment is created', async () => {
+    await app.receive({
+      name: 'issue_comment.created',
+      payload: issueCommentCreatedPayload
+    })
 
-    // Test that a comment is posted
-    nock('https://api.github.com')
-      .post('/repos/hiimbex/testing-things/issues/1/comments', (body) => {
-        expect(body).toMatchObject(issueCreatedBody)
-        return true
-      })
-      .reply(200)
-
-    // Receive a webhook event
-    await probot.receive({ name: 'issues', payload })
+    expect(github.issues.addAssigneesToIssue).toHaveBeenCalledWith({
+      number: 2,
+      owner: 'hogesuke',
+      repo: 'random-assign',
+      assignees: [ 'hogesuke2' ]
+    })
   })
 })
-
-// For more information about testing with Jest see:
-// https://facebook.github.io/jest/
-
-// For more information about testing with Nock see:
-// https://github.com/nock/nock
