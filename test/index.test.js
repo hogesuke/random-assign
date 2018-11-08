@@ -1,8 +1,6 @@
 const { Application } = require('probot')
 const myProbotApp = require('..')
 
-const issueCommentCreatedPayload = require('./fixtures/issue-comment.created.json')
-
 describe('My Probot app', () => {
   let app, github
 
@@ -30,17 +28,39 @@ describe('My Probot app', () => {
     app.auth = () => Promise.resolve(github)
   })
 
-  test('adds assignees to issue when a comment is created', async () => {
-    await app.receive({
-      name: 'issue_comment.created',
-      payload: issueCommentCreatedPayload
+  describe('adds assignees to issue when a /random comment is created', () => {
+    test('when a maintainer is specified in a comment', async () => {
+      const issueCommentCreatedPayload = require('./fixtures/issue-comment.created.json')
+      issueCommentCreatedPayload.comment.body = '/random'
+
+      await app.receive({
+        name: 'issue_comment.created',
+        payload: issueCommentCreatedPayload
+      })
+
+      expect(github.issues.addAssigneesToIssue).toHaveBeenCalledWith({
+        number: 2,
+        owner: 'hogesuke',
+        repo: 'random-assign',
+        assignees: ['hogesuke2']
+      })
     })
 
-    expect(github.issues.addAssigneesToIssue).toHaveBeenCalledWith({
-      number: 2,
-      owner: 'hogesuke',
-      repo: 'random-assign',
-      assignees: [ 'hogesuke2' ]
+    test('when a maintainer is not specified in a comment', async () => {
+      const issueCommentCreatedPayload = require('./fixtures/issue-comment.created.json')
+      issueCommentCreatedPayload.comment.body = '/random fugasuke1 fugasuke2'
+
+      await app.receive({
+        name: 'issue_comment.created',
+        payload: issueCommentCreatedPayload
+      })
+
+      expect(github.issues.addAssigneesToIssue).toHaveBeenCalledWith({
+        number: 2,
+        owner: 'hogesuke',
+        repo: 'random-assign',
+        assignees: ['fugasuke2']
+      })
     })
   })
 })
